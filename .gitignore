@@ -1,0 +1,9 @@
+# build artifacts
+node_modules/
+build/
+sam-output.yml
+
+# configuration and sensitive information
+env.sh
+src/config.ts
+
