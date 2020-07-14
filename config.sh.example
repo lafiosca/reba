@@ -1,0 +1,11 @@
+#!/bin/bash
+
+StackName=Reba
+
+S3BucketArtifacts=your-artifact-bucket
+S3PrefixArtifacts=cloudformation/reba
+
+S3BucketEmail=your-transient-bucket
+S3PrefixEmail=ses/forwarding/
+
+S3PathConfigBackups=s3://your-config-bucket/reba

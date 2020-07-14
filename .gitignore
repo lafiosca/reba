@@ -5,5 +5,5 @@ sam-output.yml
 
 # configuration and sensitive information
 env.sh
+config.sh
 src/config.ts
-
