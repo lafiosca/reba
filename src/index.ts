@@ -1,15 +1,16 @@
 import { lambda, LambdaEvent } from 'nice-lambda';
-import AWS from 'aws-sdk';
+import { S3, SES } from 'aws-sdk';
 
 import config from './config';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
 
 const emailBucket = process.env.S3BucketEmail ?? '';
 const emailPrefix = process.env.S3PrefixEmail ?? '';
 
-const s3Client = new AWS.S3();
-const sesClient = new AWS.SES();
+const excludeHeaderPattern = /^(?:Return-Path|Sender|DKIM-Signature)$/i;
+const allowDuplicateHeaderPatten = /^(?:Received)$/i;
+
+const s3Client = new S3();
+const sesClient = new SES();
 
 interface SESRecordMail {
 	timestamp: string;
@@ -192,14 +193,18 @@ const processAliases = (origRecipients: string[]): [string[], string] => {
 	return [newRecipients, firstOrigRecipient];
 };
 
+const buildS3Params = (mail: SESRecordMail): S3.GetObjectRequest => ({
+	Bucket: emailBucket,
+	Key: `${emailPrefix}${mail.messageId}`,
+});
+
+const buildS3Url = (params: S3.GetObjectRequest) => (
+	`s3://${params.Bucket}/${params.Key}`
+);
+
 /** Fetch mail message body from S3, or undefined if error */
-const fetchMessage = async (mail: SESRecordMail) => {
-	const params = {
-		Bucket: emailBucket,
-		Key: `${emailPrefix}${mail.messageId}`,
-	};
-	const s3Url = `s3://${params.Bucket}/${params.Key}`;
-	console.log(`Fetching mail content from ${s3Url}`);
+const fetchMessage = async (params: S3.GetObjectRequest) => {
+	console.log(`Fetching mail content from ${buildS3Url(params)}`);
 	try {
 		const { Body: body } = await s3Client.getObject(params).promise();
 		if (!body) {
@@ -208,61 +213,99 @@ const fetchMessage = async (mail: SESRecordMail) => {
 		return body.toString();
 	} catch (error) {
 		console.error(error);
-		throw new Error(`Failed to get mail content from S3 <${s3Url}>: ${error.message}`);
+		throw new Error(`Failed to get mail content from S3 <${buildS3Url(params)}>: ${error.message}`);
 	}
 };
 
-/** Return processed message for forwarding */
-const processMessage = (message: string, firstOrigRecipient: string) => {
-	console.log(`Original message:\n${message}`);
+/** Return processed message for forwarding, de-duping headers */
+const processMessage = (origMessage: string, firstOrigRecipient: string) => {
+	console.log(`Original message:\n\n${origMessage}`);
+	const lines = origMessage.split('\r\n');
+	const headers: { [key: string]: string } = {};
+	const newMessageLines: string[] = [];
+	let currentHeader: string[] = [];
+	let inHeaders = true;
+	let origFrom = '';
+	lines.forEach((line) => {
+		if (inHeaders) {
+			if (line[0] === ' ') {
+				// continuation of multi-line header
+				if (!currentHeader) {
+					throw new Error('Message started with space');
+				}
+				currentHeader.push(line);
+			} else {
+				// new header line
+				if (currentHeader.length > 0) {
+					// process the buffered header
+					const headerLine = currentHeader.join(' ');
+					const match = headerLine.match(/^([A-Za-z0-9-]+): (.*)$/);
+					if (!match) {
+						console.error(`Failed to parse header:\n${headerLine}`);
+						throw new Error('Failed to parse message headers');
+					}
+					const headerKey = match[1];
+					let headerValue = match[2];
+					const lowerHeaderKey = headerKey.toLowerCase();
+					if (headerKey.match(excludeHeaderPattern)) {
+						console.log(`Omitting excluded header: ${headerKey}`);
+					} else if (Object.prototype.hasOwnProperty.call(headers, lowerHeaderKey)
+						&& !headerKey.match(allowDuplicateHeaderPatten)) {
+						console.log(`Omitting duplicate header: ${headerKey}`);
+					} else {
+						// handle special header rules
+						if (lowerHeaderKey === 'from') {
+							// SES does not allow sending messages from an unverified address,
+							// so replace the message's "From:" header with the first original
+							// recipient (which should be a verified domain)
+							origFrom = headerValue;
+							const from = origFrom.replace(/"/g, '')
+								.replace(/</g, '(')
+								.replace(/>/g, ')');
+							headerValue = `"${from}" <${firstOrigRecipient}>`;
+							currentHeader = [`${headerKey}: ${headerValue}`];
+						}
+						// store condensed header value for reference
+						headers[lowerHeaderKey] = headerValue;
+						// add the buffered header lines to the new message
+						newMessageLines.push(...currentHeader);
+					}
+					currentHeader = [];
+				}
 
-	let match = message.match(/^((?:.+\r?\n)*)(\r?\n(?:.*\s+)*)/m);
+				if (line === '') {
+					// end of headers
+					inHeaders = false;
 
-	let header = match ? match[1] : message;
-	const body = match ? match[2] : '';
+					if (Object.keys(headers).length === 0) {
+						throw new Error('Message had no headers (started with blank line)');
+					}
 
-	// Add "Reply-To:" with the "From" address if it doesn't already exist
-	match = header.match(/^Reply-To: (.*\r?\n)/im);
+					// add reply-to header if none included
+					if (headers['reply-to']) {
+						console.log(`Message already has Reply-To value: ${headers['reply-to']}`);
+					} else if (origFrom) {
+						console.log(`Adding Reply-To address: ${origFrom}`);
+						newMessageLines.push(`Reply-To: ${origFrom}`);
+					} else {
+						console.error('Reply-To address not added because From address was not found');
+					}
 
-	if (match) {
-		console.log(`Reply-To address already exists: ${match[1]}`);
-	} else {
-		console.log('No Reply-To address found');
-		match = header.match(/^From: (.*\r?\n)/m);
-		if (match) {
-			console.log(`Adding Reply-To address: ${match[1]}`);
-			header = `${header}Reply-To: ${match[1]}`;
+					// add the blank line to the new message
+					newMessageLines.push(line);
+				} else {
+					// start a new header buffer
+					currentHeader = [line];
+				}
+			}
 		} else {
-			console.error('Reply-To address not added because From address was not found');
+			// add body line to message
+			newMessageLines.push(line);
 		}
-	}
+	});
 
-	// SES does not allow sending messages from an unverified address,
-	// so replace the message's "From:" header with the original
-	// recipient (which is a verified domain)
-	header = header.replace(
-		/^From: (.*)/mg,
-		(fromLine, from) => {
-			const fromName = from.replace(/"/g, '')
-				.replace(/</g, '(')
-				.replace(/>/g, ')');
-			return `From: "${fromName}" <${firstOrigRecipient}>`;
-		},
-	);
-
-	// Remove the Return-Path header
-	header = header.replace(/^Return-Path: (.*)\r?\n/mg, '');
-
-	// Remove Sender header
-	header = header.replace(/^Sender: (.*)\r?\n/mg, '');
-
-	// Remove all DKIM-Signature headers to prevent triggering an
-	// "InvalidParameterValue: Duplicate header 'DKIM-Signature'" error.
-	// These signatures will likely be invalid anyways, since the From
-	// header was modified.
-	header = header.replace(/^DKIM-Signature: .*\r?\n(\s+.*\r?\n)*/mg, '');
-
-	return `${header}${body}`;
+	const newMessage = newMessageLines.join('\r\n');
+	return newMessage;
 };
 
 const forwardMessage = async (
@@ -289,9 +332,55 @@ const forwardMessage = async (
 	}
 };
 
+const reportError = async (
+	mailError: any,
+	s3Url: string,
+	origMessage: string,
+) => {
+	const errorMessage = mailError?.message;
+	let message = `Reba failed to process a message with ${errorMessage ? 'the following error:' : 'an unknown error.'}\n\n`;
+	if (errorMessage) {
+		message += `  ${errorMessage}\n\n`;
+	}
+	if (s3Url) {
+		message += `Message S3 object: ${s3Url}\n\n`;
+	}
+	if (origMessage) {
+		message += `Original message follows:\n\n${origMessage}\n`;
+	}
+	const params = {
+		Destination: {
+			ToAddresses: [
+				config.postmaster,
+			],
+		},
+		Source: config.postmaster,
+		Message: {
+			Body: {
+				Text: {
+					Charset: 'UTF-8',
+					Data: message,
+				},
+			},
+			Subject: {
+				Charset: 'UTF-8',
+				Data: '[Reba] Mail processing failure',
+			},
+		},
+	};
+	try {
+		await sesClient.sendEmail(params).promise();
+	} catch (error) {
+		console.error(error);
+		console.error('Additionally, failed to send error message to postmaster');
+	}
+};
+
 exports.handler = lambda(async ({ event }) => {
 	console.log('Event:', JSON.stringify(event, null, 2));
 	const record = validateSesEvent(event);
+	let s3Url = '';
+	let origMessage = '';
 
 	try {
 		const [mail, origRecipients] = parseRecord(record);
@@ -302,20 +391,17 @@ exports.handler = lambda(async ({ event }) => {
 			return { disposition: 'CONTINUE' };
 		}
 
-		const origMessage = await fetchMessage(mail);
+		const s3Params = buildS3Params(mail);
+		s3Url = buildS3Url(s3Params);
+
+		origMessage = await fetchMessage(s3Params);
 		const message = processMessage(origMessage, firstOrigRecipient);
 
 		await forwardMessage(newRecipients, firstOrigRecipient, message);
 	} catch (error) {
 		console.error(error);
 		console.error('Failed to process message, notifying postmaster');
-		// TODO: notify postmaster
+		await reportError(error, s3Url, origMessage);
 	}
 	return { disposition: 'STOP_RULE' };
 });
-
-// DEBUGGING:
-(async () => {
-	const data = readFileSync(resolve('./message.txt')).toString();
-	processMessage(data, '');
-})();

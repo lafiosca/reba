@@ -1,4 +1,5 @@
 const config = {
+	postmaster: 'you@yourteam.awsapps.com',
 	aliases: [
 		{
 			pattern: /@yourdomain\.com$/i,
