@@ -11,20 +11,22 @@ source ./config.sh
 
 if [[ $S3PathConfigBackups ]]
 then
-	aws s3 cp src/config.ts ${S3PathConfigBackups}/config.$(date -Iseconds).ts
+	remoteConfig=${S3PathConfigBackups}/config.$(date -Iseconds).ts
+	echo "Backing up local config to ${remoteConfig}"
+	aws s3 cp src/config.ts ${remoteConfig}
 fi
 
-# Build Lambda package
+echo "Building Lambda code"
 yarn build
 
-# Package SAM template (loads Lambda dist zips to S3 locations)
+echo "Packaging SAM template (loading Lambda zip to S3 location)"
 aws cloudformation package \
 	--template-file sam-template.json \
 	--output-template-file sam-output.yml \
 	--s3-bucket "${S3BucketArtifacts}" \
 	--s3-prefix "${S3PrefixArtifacts}"
 
-# Deploy CloudFormation stack
+echo "Deploying CloudFormation stack ${StackName}"
 aws cloudformation deploy \
 	--template-file sam-output.yml \
 	--stack-name "${StackName}" \

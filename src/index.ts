@@ -179,7 +179,7 @@ const processAliases = (origRecipients: string[]): [string[], string] => {
 					console.log(`Recipient '${origRecipient}' matched alias rule #${i}'s reject pattern`);
 				} else {
 					// Keep track of the first original recipient that we processed a match for
-					firstOrigRecipient = firstOrigRecipient ?? origRecipient;
+					firstOrigRecipient = firstOrigRecipient || origRecipient;
 					// Add all alias recipients, omitting duplicates
 					aliasRecipients.forEach((aliasRecipient) => {
 						if (!newRecipients.includes(aliasRecipient)) {
@@ -228,7 +228,7 @@ const processMessage = (origMessage: string, firstOrigRecipient: string) => {
 	let origFrom = '';
 	lines.forEach((line) => {
 		if (inHeaders) {
-			if (line[0] === ' ') {
+			if (line.match(/^\s/)) {
 				// continuation of multi-line header
 				if (!currentHeader) {
 					throw new Error('Message started with space');
