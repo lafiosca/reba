@@ -239,7 +239,7 @@ const processMessage = (origMessage: string, firstOrigRecipient: string) => {
 				if (currentHeader.length > 0) {
 					// process the buffered header
 					const headerLine = currentHeader.join(' ');
-					const match = headerLine.match(/^([A-Za-z0-9-]+): (.*)$/);
+					const match = headerLine.match(/^([A-Za-z0-9-]+):\s?(.*)$/);
 					if (!match) {
 						console.error(`Failed to parse header:\n${headerLine}`);
 						throw new Error('Failed to parse message headers');
