@@ -5,7 +5,8 @@
 	"main": "build/index.js",
 	"types": "build/index.d.ts",
 	"scripts": {
-		"build": "./node_modules/.bin/tsc",
+		"clean": "rimraf build",
+		"build": "yarn clean && tsc && yarn install --production --modules-folder build/node_modules",
 		"lint": "node_modules/.bin/eslint --ext .js,.jsx,.ts,.tsx src"
 	},
 	"repository": "https://github.com/lafiosca/reba.git",
@@ -23,6 +24,7 @@
 		"eslint": "^7.3.1",
 		"eslint-config-airbnb-typescript": "^8.0.2",
 		"eslint-plugin-import": "^2.22.0",
+		"rimraf": "^3.0.2",
 		"typescript": "^3.9.5"
 	}
 }
