@@ -7,6 +7,7 @@ const emailBucket = process.env.S3BucketEmail ?? '';
 const emailPrefix = process.env.S3PrefixEmail ?? '';
 
 const excludeHeaderPattern = /^(?:Return-Path|Sender|DKIM-Signature)$/i;
+const excludeIfEmptyHeaderPattern = /^(?:Reply-To)$/i;
 const allowDuplicateHeaderPatten = /^(?:Received)$/i;
 
 const s3Client = new S3();
@@ -239,16 +240,17 @@ const processMessage = (origMessage: string, firstOrigRecipient: string) => {
 				if (currentHeader.length > 0) {
 					// process the buffered header
 					const headerLine = currentHeader.join(' ');
-					const match = headerLine.match(/^([A-Za-z0-9-]+):\s?(.*)$/);
+					const match = headerLine.match(/^([^\s:]+):\s?(.*)$/);
 					if (!match) {
-						console.error(`Failed to parse header:\n${headerLine}`);
-						throw new Error('Failed to parse message headers');
+						throw new Error(`Failed to parse message header:\n${headerLine}`);
 					}
 					const headerKey = match[1];
 					let headerValue = match[2];
 					const lowerHeaderKey = headerKey.toLowerCase();
 					if (headerKey.match(excludeHeaderPattern)) {
 						console.log(`Omitting excluded header: ${headerKey}`);
+					} else if (headerKey.match(excludeIfEmptyHeaderPattern) && !headerValue.trim()) {
+						console.log(`Omitting excluded empty header: ${headerKey}`);
 					} else if (Object.prototype.hasOwnProperty.call(headers, lowerHeaderKey)
 						&& !headerKey.match(allowDuplicateHeaderPatten)) {
 						console.log(`Omitting duplicate header: ${headerKey}`);
