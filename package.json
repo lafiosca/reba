@@ -14,7 +14,7 @@
 	"license": "MIT",
 	"private": false,
 	"dependencies": {
-		"aws-sdk": "^2.706.0",
+		"aws-sdk": "^2.814.0",
 		"nice-lambda": "^3.0.0"
 	},
 	"devDependencies": {
