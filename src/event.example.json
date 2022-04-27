@@ -1,0 +1,136 @@
+{
+    "Records": [
+        {
+            "eventSource": "aws:ses",
+            "eventVersion": "1.0",
+            "ses": {
+                "mail": {
+                    "timestamp": "2022-04-27T19:16:51.953Z",
+                    "source": "randi.sifontes-sales=example.com@realctonline.xyz",
+                    "messageId": "445k2akm742jt57fct02gkc92rrkna0net1t3ro1",
+                    "destination": [
+                        "sales@example.com"
+                    ],
+                    "headersTruncated": false,
+                    "headers": [
+                        {
+                            "name": "Return-Path",
+                            "value": "<randi.sifontes-sales=example.com@realctonline.xyz>"
+                        },
+                        {
+                            "name": "Received",
+                            "value": "from mail.realctonline.xyz ([217.199.121.217]) by inbound-smtp.us-east-1.amazonaws.com with SMTP id 445k2akm742jt57fct02gkc92rrkna0net1t3ro1 for sales@example.com; Wed, 27 Apr 2022 19:16:51 +0000 (UTC)"
+                        },
+                        {
+                            "name": "X-SES-Spam-Verdict",
+                            "value": "FAIL"
+                        },
+                        {
+                            "name": "X-SES-Virus-Verdict",
+                            "value": "PASS"
+                        },
+                        {
+                            "name": "Received-SPF",
+                            "value": "pass (spfCheck: domain of realctonline.xyz designates 217.199.121.217 as permitted sender) client-ip=217.199.121.217; envelope-from=randi.sifontes-sales=example.com@realctonline.xyz; helo=217.199.121.217;"
+                        },
+                        {
+                            "name": "Authentication-Results",
+                            "value": "amazonses.com; spf=pass (spfCheck: domain of realctonline.xyz designates 217.199.121.217 as permitted sender) client-ip=217.199.121.217; envelope-from=randi.sifontes-sales=example.com@realctonline.xyz; helo=217.199.121.217; dkim=pass header.i=@realctonline.xyz; dmarc=pass header.from=realctonline.xyz;"
+                        },
+                        {
+                            "name": "X-SES-RECEIPT",
+                            "value": "AEFBQUFBQUFBQUFGd2RNMGFrVkZVMXNkUGx0K0RtcUZuQzBHOTlWQTMxUjU4VUtRSGhlekZuUFpNMWVqWUlicllEWEUwWE5EaWI4bHYybGUrS0F0SUlkbDJwWTJpbDhzVHFyL3dTa1d3WVJtSi9SUWZsY0p0MDZwalZyZmpnSnJ1dU5ROCsxNkE4eUUwbGxjWkRORE1jQ2RLQ0hhT2JucUFWc2lydGJrR2JsYW5VQm5zWUhyTnhON0ovZllqQ0taT00rWGZLWEJyYW5Ycmg0ZE5xclpQZitRbVpXdEtKczBCN01IWS80TCtxY1VXaDFEK3R5MEtWaHpDVEMyblA0cldUTzFDSFpEWXROUE1ZVnFqWWpjMWFsYm45NDBzaEtLdlBhVXk4ODBERzYyZVpuYkJ5UGoxajBCclBYWDBVU3pvYVFBeXF5aDRKRk1ra0EyY3gwT1VyNGJadXhZTXlMVis="
+                        },
+                        {
+                            "name": "X-SES-DKIM-SIGNATURE",
+                            "value": "a=rsa-sha256; q=dns/txt; b=a4z9G808qSJEbuPwqsS3eCyfU7b/tfGf/lisW9Ttk0K4NqXfriwPczIr/gjeBjmGViMqMC0Iu1IQAObvxrQn4lD7JUI6ljzC9r0IgxWW3PfhHAcOTtD4f2/K8NCA5InneYhogo6TELYGqhgvxyyKI3Twja/lc8vRtDU0oAyqP6E=; c=relaxed/simple; s=6gbrjpgwjskckoa6a5zn6fwqkn67xbtw; d=amazonses.com; t=1651087012; v=1; bh=N3cXHhU/NvOSaDrF6xaypCDglGJMWXh5lm9gCnuNVGI=; h=From:To:Cc:Bcc:Subject:Date:Message-ID:MIME-Version:Content-Type:X-SES-RECEIPT;"
+                        },
+                        {
+                            "name": "DKIM-Signature",
+                            "value": "v=1; a=rsa-sha1; c=relaxed/relaxed; s=dkim; d=realctonline.xyz; h=Date:From:To:Subject:MIME-Version:Content-Type:List-Unsubscribe:Message-ID; i=randi.sifontes@realctonline.xyz; bh=bLfOhNCRZ7EDZu0aEzHZMA2rhwM=; b=K5irxc2OES58weV3+ACE64WX/U/gOCJrv/4wsNQlACSVMcxkMKhJT/xn7YVCF1uIcrg7adSpDOcuHWAOJgG4ibXilLGThv7LvECGL1mfCeUlLRhiHQRf2rmfBWdFW7bPFgopw8NM04uwQ9bUJg5Z/gdbxAa/hdYdyTOJB7zjw5M="
+                        },
+                        {
+                            "name": "DomainKey-Signature",
+                            "value": "a=rsa-sha1; c=nofws; q=dns; s=dkim; d=realctonline.xyz; b=MDEvTUIcuNI37vxn65Po2JRYtBg3o5G/UXweIWS86h0oZfKDrHxYyNjZtvlVMFFH0g2c/T3U4cN7   m/HUvd8WruFZPYt/HveP82+HmZkrkEiyVzB+DpIAS8D7NxPT4WxffG6KtMNAX38M2N15YxULJNXs   BB4WPBeCmYvmck3gtWM=;"
+                        },
+                        {
+                            "name": "Received",
+                            "value": "by mail.realctonline.xyz id hd6ba80001g2 for <sales@example.com>; Wed, 27 Apr 2022 15:07:09 -0400 (envelope-from <randi.sifontes-sales=example.com@realctonline.xyz>)"
+                        },
+                        {
+                            "name": "Date",
+                            "value": "Wed, 27 Apr 2022 15:07:09 -0400"
+                        },
+                        {
+                            "name": "From",
+                            "value": "Randi Sifontes <randi.sifontes@realctonline.xyz>"
+                        },
+                        {
+                            "name": "To",
+                            "value": "<sales@example.com>"
+                        },
+                        {
+                            "name": "Subject",
+                            "value": "Up to $1OO Reward for your opinion of Nike  #19201469"
+                        },
+                        {
+                            "name": "MIME-Version",
+                            "value": "1.0"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "multipart/alternative; \tboundary=\"----=_Part_799_82280546.1651086411984\""
+                        },
+                        {
+                            "name": "List-Unsubscribe",
+                            "value": "<http://www.realctonline.xyz/glazing-represent/7b05wC2395sTo8911h1T1yVI2dew28RwDhIwfstIvDxbsribrHY4GgEsvZ6ldDedK5nzq106hMBw@D>"
+                        },
+                        {
+                            "name": "Message-ID",
+                            "value": "<0.0.0.82.1D85A69FE713B66.4DEAD@mail.realctonline.xyz>"
+                        }
+                    ],
+                    "commonHeaders": {
+                        "returnPath": "randi.sifontes-sales=example.com@realctonline.xyz",
+                        "from": [
+                            "Randi Sifontes <randi.sifontes@realctonline.xyz>"
+                        ],
+                        "date": "Wed, 27 Apr 2022 15:07:09 -0400",
+                        "to": [
+                            "sales@example.com"
+                        ],
+                        "messageId": "<0.0.0.82.1D85A69FE713B66.4DEAD@mail.realctonline.xyz>",
+                        "subject": "Up to $1OO Reward for your opinion of Nike  #19201469"
+                    }
+                },
+                "receipt": {
+                    "timestamp": "2022-04-27T19:16:51.953Z",
+                    "processingTimeMillis": 999,
+                    "recipients": [
+                        "sales@example.com"
+                    ],
+                    "spamVerdict": {
+                        "status": "FAIL"
+                    },
+                    "virusVerdict": {
+                        "status": "PASS"
+                    },
+                    "spfVerdict": {
+                        "status": "PASS"
+                    },
+                    "dkimVerdict": {
+                        "status": "PASS"
+                    },
+                    "dmarcVerdict": {
+                        "status": "PASS"
+                    },
+                    "action": {
+                        "type": "Lambda",
+                        "functionArn": "arn:aws:lambda:us-east-1:xxxxxxxxxxxx:function:Reba-ProcessEmail",
+                        "invocationType": "RequestResponse"
+                    }
+                }
+            }
+        }
+    ]
+}

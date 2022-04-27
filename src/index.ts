@@ -1,7 +1,15 @@
-import { lambda, LambdaEvent } from 'nice-lambda';
+/* eslint-disable import/prefer-default-export */
 import { S3, SES } from 'aws-sdk';
+import {
+	SESEvent,
+	Handler,
+	SESEventRecord,
+	SESMail,
+} from 'aws-lambda';
 
 import config from './config';
+
+type SESHandler = Handler<SESEvent, { disposition: 'CONTINUE' | 'STOP_RULE' }>;
 
 const emailBucket = process.env.S3BucketEmail ?? '';
 const emailPrefix = process.env.S3PrefixEmail ?? '';
@@ -13,70 +21,8 @@ const allowDuplicateHeaderPatten = /^(?:Received)$/i;
 const s3Client = new S3();
 const sesClient = new SES();
 
-interface SESRecordMail {
-	timestamp: string;
-	source: string;
-	messageId: string;
-	destination: string[];
-	headersTruncated: boolean;
-	headers: {
-		name: string;
-		value: string;
-	}[];
-	commonHeaders: {
-		returnPath: string;
-		from: string[];
-		date: string;
-		to: string[];
-		messageId: string;
-		subject: string;
-	};
-}
-
-/**
- * Some values seen in the verdict fields include:
- *   PASS
- *   FAIL
- *   GRAY
- *   PROCESSING_FAILED
- */
-interface SESRecordReceipt {
-	timestamp: string;
-	processingTimeMillis: number;
-	recipients: string[];
-	spamVerdict: {
-		status: string;
-	};
-	virusVerdict: {
-		status: string;
-	};
-	spfVerdict: {
-		status: string;
-	};
-	dkimVerdict: {
-		status: string;
-	};
-	dmarcVerdict: {
-		status: string;
-	};
-	action: {
-		type: 'Lambda';
-		functionArn: string;
-		invocationType: string;
-	};
-}
-
-interface SESRecord {
-	eventSource: 'aws:ses';
-	eventVersion: '1.0';
-	ses: {
-		mail: SESRecordMail;
-		receipt: SESRecordReceipt;
-	};
-}
-
 /** Does a semi-thorough validation of Lambda event to ensure it looks like what we expect from SES */
-const validateSesEvent = (event: LambdaEvent): SESRecord => {
+const validateSesEvent = (event: SESEvent): SESEventRecord => {
 	if (!event) {
 		throw new Error('Missing event');
 	}
@@ -149,7 +95,7 @@ const validateSesEvent = (event: LambdaEvent): SESRecord => {
 };
 
 /** Parses an SES record for forwarding */
-const parseRecord = (record: SESRecord): [SESRecordMail, string[]] => {
+const parseRecord = (record: SESEventRecord): [SESMail, string[]] => {
 	console.log('Parsing SES record');
 
 	const { mail, receipt: { recipients } } = record.ses;
@@ -158,35 +104,80 @@ const parseRecord = (record: SESRecord): [SESRecordMail, string[]] => {
 		throw new Error('Record did not contain recipients');
 	}
 
-	return [mail, recipients];
+	return [mail, recipients.map((recipient) => recipient.toLowerCase())];
 };
 
 /** Process alias forwarding rules for original recipients */
-const processAliases = (origRecipients: string[]): [string[], string] => {
-	console.log(`Processing aliases for original recipients: ${JSON.stringify(origRecipients, null, 2)}`);
-	const { aliases } = config;
+const processRules = (origRecipients: string[], subject: string): [string[], string] => {
+	console.log(`Processing rules for original recipients: ${JSON.stringify(origRecipients, null, 2)}`);
+	const {
+		rules,
+		globalRules: {
+			rejectIfSubjectContains,
+		} = {},
+	} = config;
 	let firstOrigRecipient = '';
 	const newRecipients: string[] = [];
 	origRecipients.forEach((origRecipient) => {
 		let matched = false;
-		for (let i = 0; !matched && i < aliases.length; i += 1) {
-			const { pattern, rejectPattern, recipients: aliasRecipients } = aliases[i];
-			// If the recipient matches this alias rule pattern
-			if (origRecipient.match(pattern)) {
-				// We've matched a rule
+		for (let i = 0; !matched && i < rules.length; i += 1) {
+			const {
+				matchExact,
+				matchHost,
+				matchPattern,
+				rejectUsers,
+				rejectPattern,
+				allowAll,
+				recipients: aliasRecipients,
+			} = rules[i];
+			// Check if the rule is valid, just in case
+			if (matchExact || matchHost || matchPattern) {
+				const [origUser, origHost] = origRecipient.split('@');
+				// First, see if the recipient matches this rule
 				matched = true;
-				// If the recipient matches the rule's reject pattern
-				if (rejectPattern && origRecipient.match(rejectPattern)) {
-					console.log(`Recipient '${origRecipient}' matched alias rule #${i}'s reject pattern`);
-				} else {
-					// Keep track of the first original recipient that we processed a match for
-					firstOrigRecipient = firstOrigRecipient || origRecipient;
-					// Add all alias recipients, omitting duplicates
-					aliasRecipients.forEach((aliasRecipient) => {
-						if (!newRecipients.includes(aliasRecipient)) {
-							newRecipients.push(aliasRecipient);
+				if (matchExact && origRecipient !== matchExact) {
+					matched = false;
+				}
+				if (matched && matchHost && origHost !== matchHost) {
+					matched = false;
+				}
+				if (matched && matchPattern && !origRecipient.match(matchPattern)) {
+					matched = false;
+				}
+				// If the recipient matches, process rule
+				if (matched) {
+					let rejected = false;
+					if (!allowAll) {
+						// Check rule's reject conditions
+						if (rejectUsers?.includes(origUser)) {
+							rejected = true;
+							console.log(`Recipient '${origRecipient}' was in rejectUsers list for rule #${i}`);
 						}
-					});
+						if (!rejected && rejectPattern && origRecipient.match(rejectPattern)) {
+							rejected = true;
+							console.log(`Recipient '${origRecipient}' matched rejectPattern for rule #${i}`);
+						}
+						if (!rejected && rejectIfSubjectContains) {
+							for (let ri = 0; !rejected && ri < rejectIfSubjectContains.length; ri += 1) {
+								if (subject.includes(rejectIfSubjectContains[ri])) {
+									rejected = true;
+									console.log(`Subject header '${subject}' contained globally rejected string '${rejectIfSubjectContains[ri]}'`);
+								}
+							}
+						}
+					}
+					if (rejected) {
+						// Do nothing; because we matched, no further rules will be processed
+					} else {
+						// Keep track of the first original recipient that we processed a match for
+						firstOrigRecipient = firstOrigRecipient || origRecipient;
+						// Add all alias recipients, omitting duplicates
+						aliasRecipients.forEach((aliasRecipient) => {
+							if (!newRecipients.includes(aliasRecipient)) {
+								newRecipients.push(aliasRecipient);
+							}
+						});
+					}
 				}
 			}
 		}
@@ -194,7 +185,7 @@ const processAliases = (origRecipients: string[]): [string[], string] => {
 	return [newRecipients, firstOrigRecipient];
 };
 
-const buildS3Params = (mail: SESRecordMail): S3.GetObjectRequest => ({
+const buildS3Params = (mail: SESMail): S3.GetObjectRequest => ({
 	Bucket: emailBucket,
 	Key: `${emailPrefix}${mail.messageId}`,
 });
@@ -212,9 +203,9 @@ const fetchMessage = async (params: S3.GetObjectRequest) => {
 			throw new Error('Received empty Body');
 		}
 		return body.toString();
-	} catch (error) {
+	} catch (error: any) {
 		console.error(error);
-		throw new Error(`Failed to get mail content from S3 <${buildS3Url(params)}>: ${error.message}`);
+		throw new Error(`Failed to get mail content from S3 <${buildS3Url(params)}>: ${error?.message ?? error}`);
 	}
 };
 
@@ -328,9 +319,9 @@ const forwardMessage = async (
 
 	try {
 		await sesClient.sendRawEmail(params).promise();
-	} catch (error) {
+	} catch (error: any) {
 		console.error(error);
-		throw new Error(`Failed to forward email: ${error.message}`);
+		throw new Error(`Failed to forward email: ${error?.message ?? error}`);
 	}
 };
 
@@ -378,7 +369,7 @@ const reportError = async (
 	}
 };
 
-exports.handler = lambda(async ({ event }) => {
+export const handler: SESHandler = async (event: SESEvent) => {
 	console.log('Event:', JSON.stringify(event, null, 2));
 	const record = validateSesEvent(event);
 	let s3Url = '';
@@ -386,7 +377,7 @@ exports.handler = lambda(async ({ event }) => {
 
 	try {
 		const [mail, origRecipients] = parseRecord(record);
-		const [newRecipients, firstOrigRecipient] = processAliases(origRecipients);
+		const [newRecipients, firstOrigRecipient] = processRules(origRecipients, mail.commonHeaders.subject ?? '');
 
 		if (newRecipients.length === 0) {
 			console.log('No recipients after alias processing, let it bounce');
@@ -406,4 +397,4 @@ exports.handler = lambda(async ({ event }) => {
 		await reportError(error, s3Url, origMessage);
 	}
 	return { disposition: 'STOP_RULE' };
-});
+};
