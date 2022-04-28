@@ -14,6 +14,8 @@ then
 	remoteConfig=${S3PathConfigBackups}/config.$(date -Iseconds).ts
 	echo "Backing up local config to ${remoteConfig}"
 	aws s3 cp src/config.ts ${remoteConfig}
+	echo "Backing up local config to ${S3PathConfigBackups}/config.ts"
+	aws s3 cp src/config.ts ${S3PathConfigBackups}/config.ts
 fi
 
 echo "Building Lambda code"
