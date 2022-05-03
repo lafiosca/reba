@@ -7,4 +7,6 @@ sam-output.yml
 env.sh
 config.sh
 src/config.ts
+src/config.*.ts
+!src/config.example.ts
 src/event.json
