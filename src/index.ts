@@ -159,9 +159,15 @@ const processRules = (origRecipients: string[], subject: string): [string[], str
 						}
 						if (!rejected && rejectIfSubjectContains) {
 							for (let ri = 0; !rejected && ri < rejectIfSubjectContains.length; ri += 1) {
-								if (subject.includes(rejectIfSubjectContains[ri])) {
+								const rejectItem = rejectIfSubjectContains[ri];
+								if (typeof rejectItem === 'string') {
+									if (subject.includes(rejectItem)) {
+										rejected = true;
+										console.log(`Subject header '${subject}' contained globally rejected string '${rejectItem}'`);
+									}
+								} else if (subject.match(rejectItem)) {
 									rejected = true;
-									console.log(`Subject header '${subject}' contained globally rejected string '${rejectIfSubjectContains[ri]}'`);
+									console.log(`Subject header '${subject}' matched globally rejected pattern '${rejectItem}'`);
 								}
 							}
 						}

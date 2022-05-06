@@ -27,7 +27,7 @@ export interface Config {
 	postmaster: string;
 	rules: ConfigRule[];
 	globalRules?: {
-		rejectIfSubjectContains?: string[],
+		rejectIfSubjectContains?: (string | RegExp)[],
 	},
 }
 
