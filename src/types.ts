@@ -21,14 +21,18 @@ type ConfigRule = ConfigRuleMatch & {
 	allowAll?: true;
 	/** List of alias recipients to forward message to */
 	recipients: string[];
+	/** Reject messages with subject containing strings or matching patterns */
+	rejectIfSubjectContains?: (string | RegExp)[];
+
 };
 
 export interface Config {
 	postmaster: string;
 	rules: ConfigRule[];
 	globalRules?: {
-		rejectIfSubjectContains?: (string | RegExp)[],
-	},
+		/** Reject messages with subject containing strings or matching patterns */
+		rejectIfSubjectContains?: (string | RegExp)[];
+	};
 }
 
 export interface SESRecordMail {

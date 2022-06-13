@@ -113,7 +113,7 @@ const processRules = (origRecipients: string[], subject: string): [string[], str
 	const {
 		rules,
 		globalRules: {
-			rejectIfSubjectContains,
+			rejectIfSubjectContains: rejectIfSubjectContainsGlobal,
 		} = {},
 	} = config;
 	let firstOrigRecipient = '';
@@ -127,6 +127,7 @@ const processRules = (origRecipients: string[], subject: string): [string[], str
 				matchPattern,
 				rejectUsers,
 				rejectPattern,
+				rejectIfSubjectContains,
 				allowAll,
 				recipients: aliasRecipients,
 			} = rules[i];
@@ -160,6 +161,20 @@ const processRules = (origRecipients: string[], subject: string): [string[], str
 						if (!rejected && rejectIfSubjectContains) {
 							for (let ri = 0; !rejected && ri < rejectIfSubjectContains.length; ri += 1) {
 								const rejectItem = rejectIfSubjectContains[ri];
+								if (typeof rejectItem === 'string') {
+									if (subject.includes(rejectItem)) {
+										rejected = true;
+										console.log(`Subject header '${subject}' contained rejected string '${rejectItem}'`);
+									}
+								} else if (subject.match(rejectItem)) {
+									rejected = true;
+									console.log(`Subject header '${subject}' matched rejected pattern '${rejectItem}'`);
+								}
+							}
+						}
+						if (!rejected && rejectIfSubjectContainsGlobal) {
+							for (let ri = 0; !rejected && ri < rejectIfSubjectContainsGlobal.length; ri += 1) {
+								const rejectItem = rejectIfSubjectContainsGlobal[ri];
 								if (typeof rejectItem === 'string') {
 									if (subject.includes(rejectItem)) {
 										rejected = true;
