@@ -23,7 +23,6 @@ type ConfigRule = ConfigRuleMatch & {
 	recipients: string[];
 	/** Reject messages with subject containing strings or matching patterns */
 	rejectIfSubjectContains?: (string | RegExp)[];
-
 };
 
 export interface Config {
@@ -32,6 +31,8 @@ export interface Config {
 	globalRules?: {
 		/** Reject messages with subject containing strings or matching patterns */
 		rejectIfSubjectContains?: (string | RegExp)[];
+		/** Reject messages with body containing strings or matching patterns */
+		rejectIfBodyLineContains?: (string | RegExp)[];
 	};
 }
 

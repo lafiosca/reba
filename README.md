@@ -38,3 +38,13 @@ the following configuration:
 	1. **S3**: specify the same bucket and prefix that you configured for deployment
 	2. **Lambda**: choose the `<StackName>-ProcessEmail` function created by deployment
 	3. **Bounce**: choose the "550 5.1.1 Mailbox does not exist" template and specify `postmaster@mydomain.com` as the reply sender
+
+### Testing changes
+
+Make sure your AWS credentials are in your environment, store a valid SES Lambda event in `src/event.json`, then run:
+
+```
+yarn build
+source config.sh
+SuppressSend=yes node build/test.js
+```

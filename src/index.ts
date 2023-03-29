@@ -13,6 +13,7 @@ type SESHandler = Handler<SESEvent, { disposition: 'CONTINUE' | 'STOP_RULE' }>;
 
 const emailBucket = process.env.S3BucketEmail ?? '';
 const emailPrefix = process.env.S3PrefixEmail ?? '';
+const suppressSend = process.env.SuppressSend === 'yes';
 
 const excludeHeaderPattern = /^(?:Return-Path|Sender|DKIM-Signature)$/i;
 const excludeIfEmptyHeaderPattern = /^(?:Reply-To)$/i;
@@ -231,7 +232,8 @@ const fetchMessage = async (params: S3.GetObjectRequest) => {
 };
 
 /** Return processed message for forwarding, de-duping headers */
-const processMessage = (origMessage: string, firstOrigRecipient: string) => {
+const processMessage = (origMessage: string, firstOrigRecipient: string): string | undefined => {
+	const rejectIfBodyLineContains = config.globalRules?.rejectIfBodyLineContains ?? [];
 	console.log(`Original message:\n\n${origMessage}`);
 	const lines = origMessage.split('\r\n');
 	const headers: { [key: string]: string } = {};
@@ -239,7 +241,8 @@ const processMessage = (origMessage: string, firstOrigRecipient: string) => {
 	let currentHeader: string[] = [];
 	let inHeaders = true;
 	let origFrom = '';
-	lines.forEach((line) => {
+	for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+		const line = lines[lineIndex];
 		if (inHeaders) {
 			if (line.match(/^\s/)) {
 				// continuation of multi-line header
@@ -313,10 +316,22 @@ const processMessage = (origMessage: string, firstOrigRecipient: string) => {
 				}
 			}
 		} else {
+			// eslint-disable-next-line no-restricted-syntax
+			for (const rejectPattern of rejectIfBodyLineContains) {
+				if (typeof rejectPattern === 'string') {
+					if (line.includes(rejectPattern)) {
+						console.log(`Body line (index ${lineIndex}) contained globally rejected string '${rejectPattern}'`);
+						return undefined;
+					}
+				} else if (line.match(rejectPattern)) {
+					console.log(`Body line (index ${lineIndex}) contained globally rejected pattern '${rejectPattern}'`);
+					return undefined;
+				}
+			}
 			// add body line to message
 			newMessageLines.push(line);
 		}
-	});
+	}
 
 	const newMessage = newMessageLines.join('\r\n');
 	return newMessage;
@@ -338,11 +353,15 @@ const forwardMessage = async (
 	console.log(`Sending email via SES ${firstOrigRecipient} -> [${newRecipients.join(', ')}]`);
 	console.log(JSON.stringify(params, null, 2));
 
-	try {
-		await sesClient.sendRawEmail(params).promise();
-	} catch (error: any) {
-		console.error(error);
-		throw new Error(`Failed to forward email: ${error?.message ?? error}`);
+	if (suppressSend) {
+		console.log('Would send raw email here:', params);
+	} else {
+		try {
+			await sesClient.sendRawEmail(params).promise();
+		} catch (error: any) {
+			console.error(error);
+			throw new Error(`Failed to forward email: ${error?.message ?? error}`);
+		}
 	}
 };
 
@@ -382,11 +401,15 @@ const reportError = async (
 			},
 		},
 	};
-	try {
-		await sesClient.sendEmail(params).promise();
-	} catch (error) {
-		console.error(error);
-		console.error('Additionally, failed to send error message to postmaster');
+	if (suppressSend) {
+		console.log('Would send email here:', params);
+	} else {
+		try {
+			await sesClient.sendEmail(params).promise();
+		} catch (error) {
+			console.error(error);
+			console.error('Additionally, failed to send error message to postmaster');
+		}
 	}
 };
 
@@ -410,6 +433,11 @@ export const handler: SESHandler = async (event: SESEvent) => {
 
 		origMessage = await fetchMessage(s3Params);
 		const message = processMessage(origMessage, firstOrigRecipient);
+
+		if (message === undefined) {
+			console.log('Message was rejected during body processing');
+			return { disposition: 'CONTINUE' };
+		}
 
 		await forwardMessage(newRecipients, firstOrigRecipient, message);
 	} catch (error) {
